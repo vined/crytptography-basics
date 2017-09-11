@@ -42,7 +42,8 @@ splitBy step str =
 
 
 getVariants :: String -> Int -> [(Int, [String])]
-getVariants str maxLinesCount = filter (\var -> length (snd var) < maxLinesCount) [ (step, splitBy step str) | step <- getDivisors (length str)]
+getVariants str maxLinesCount =
+    filter (\var -> length (snd var) < maxLinesCount) [ (step, splitBy step str) | step <- getDivisors (length str)]
 
 
 getFirstLength :: [String] -> Int
@@ -121,7 +122,8 @@ formatOrder linesOrder = foldl (\acc i -> acc ++ show(i)  ++ "-") "-" linesOrder
 
 
 formatTranspositionVariants :: [(Int, [Int], String)] -> String
-formatTranspositionVariants variants = foldl (\acc (step, linesOrder, str) -> acc ++ show(step) ++ " " ++ (formatOrder linesOrder) ++ "\n" ++ str ++ "\n\n") "\n" variants
+formatTranspositionVariants variants =
+    foldl (\acc (step, linesOrder, str) -> acc ++ show(step) ++ " " ++ (formatOrder linesOrder) ++ "\n" ++ str ++ "\n\n") "\n" variants
 
 
 decryptTransposition :: String -> String
@@ -132,22 +134,103 @@ decryptTransposition str = formatTranspositionVariants (getDecryptedTranspositio
 
 fenceHeight = 4
 
-getFractionalLength :: String -> Rational
-getFractionalLength str = fromIntegral (length str)
+getStepSize :: Int -> Int
+getStepSize height =
+    if height <= 2
+        then height
+        else ((height - 2) * 2) + 2
+
+getLastStepSize :: Int -> Int -> Int
+getLastStepSize total stepSize = total `mod` stepSize
+
+getWholeStepsCount :: Int -> Int -> Int
+getWholeStepsCount total stepSize = total `div` stepSize
 
 
-getPartsCount :: Int -> String -> Int
-getPartsCount height str = ceiling ((getFractionalLength str) / (fromIntegral height))
+calculateStepElementsCount :: Int -> Int -> Int -> [Int]
+calculateStepElementsCount stepSize lastStepSize wholeStepsCount =
+    [ if x <= lastStepSize then (wholeStepsCount + 1) else wholeStepsCount | x <- [1..stepSize]]
 
 
-decryptFenceWithKey :: Int -> String -> [String]
-decryptFenceWithKey height str = splitBy (getPartsCount height str) str
+getMiddle :: [a] -> [a]
+getMiddle xs =
+    if length xs < 2
+        then []
+        else tail (init xs)
+
+sumFirstAndLast :: [Int] -> Int
+sumFirstAndLast xs =
+    case xs of
+        [] -> 0
+        [x] -> x
+        xs -> (head xs) + (last xs)
+
+mergeFirstWithLast :: [Int] -> [Int]
+mergeFirstWithLast xs =
+    if length xs < 2
+        then xs
+        else (sumFirstAndLast xs) : (mergeFirstWithLast (getMiddle xs))
 
 
-formatFenceResult :: [String] -> String
-formatFenceResult parts = foldl (\acc s -> acc ++ s ++ "\n") "\n" parts
+getStepElementsCount :: Int -> Int -> [Int]
+getStepElementsCount height total = let stepSize = getStepSize height in
+    calculateStepElementsCount stepSize (getLastStepSize total stepSize) (getWholeStepsCount total stepSize)
 
+getLinesElementsCount :: [Int] -> [Int]
+getLinesElementsCount stepElementsCount =
+    if length stepElementsCount <= 2
+        then stepElementsCount
+        else (head stepElementsCount) : (mergeFirstWithLast (tail stepElementsCount))
+
+
+splitToLines :: [Int] -> String -> [String]
+splitToLines [x] str = [str]
+splitToLines linesSizes str =
+    let lineSize = head linesSizes
+    in (take lineSize str) : (splitToLines (tail linesSizes) (drop lineSize str))
+
+getLines :: Int -> String -> [String]
+getLines height str = splitToLines (getLinesElementsCount (getStepElementsCount height (length str))) str
+
+
+getStringOrEmpty :: Int -> [String] -> String
+getStringOrEmpty idx strs = if length strs <= idx then "" else strs !! idx
+
+getCharOrEmpty :: Int -> String -> Char
+getCharOrEmpty idx str = if length str <= idx then ' ' else (str !! idx)
+
+
+preAppendEach :: String -> [String] -> [String]
+preAppendEach appenders strs =
+    let l = length appenders
+    in [ (appenders !! i) : (getStringOrEmpty i strs) | i <- [0..l-1] ]
+
+insertToMiddle :: String -> String -> String
+insertToMiddle pair str = [(head pair)] ++ str ++ [(last pair)]
+
+insertToMiddleForEachPair :: [String] -> [String] -> [String]
+insertToMiddleForEachPair pairs inserts =
+    let l = length pairs
+    in [ insertToMiddle (pairs !! i) (getStringOrEmpty i inserts) | i <- [0..l-1] ]
+
+splitToPairs :: String -> [String]
+splitToPairs str =
+    let l = length str
+    in [ [(getCharOrEmpty i str), (getCharOrEmpty (i+1) str)] | i <- [0,2..l-1] ]
+
+mergeLines :: [String] -> [String]
+mergeLines [str] = [ [s] | s <- str ]
+mergeLines strs = insertToMiddleForEachPair (splitToPairs (head strs)) (mergeLines (tail strs))
+
+
+getDecryptedSteps :: Int -> String -> [String]
+getDecryptedSteps height strs =
+    let lns = getLines height strs
+    in preAppendEach (head lns) (mergeLines (tail lns))
+
+
+decryptFenceWithHeight :: Int -> String -> String
+decryptFenceWithHeight height str = joinStrings (getDecryptedSteps height str)
 
 decryptFence :: String -> String
-decryptFence str = formatFenceResult (decryptFenceWithKey fenceHeight str)
-
+decryptFence str = decryptFenceWithHeight fenceHeight str
